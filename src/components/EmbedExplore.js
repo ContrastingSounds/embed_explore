@@ -23,15 +23,26 @@
  */
 
 import React, { useCallback, useContext } from 'react'
-import { Button, Heading } from '@looker/components'
+import qs from 'query-string'
+import { Button } from '@looker/components'
 import { LookerEmbedSDK } from '@looker/embed-sdk'
 import { ExtensionContext } from '@looker/extension-sdk-react'
 import { EmbedContainer } from './EmbedContainer'
 
 const EmbedExplore = ({ id }) => {
+  const [qid, setQid] = React.useState('')
   const [running, setRunning] = React.useState(true)
   const [explore, setExplore] = React.useState()
   const extensionContext = useContext(ExtensionContext)
+
+  const updateQid = (url) => {
+    console.log('update with url:', url)
+    const params = new URLSearchParams(url)
+    const query = params.get('qid')
+    if (query) {
+      setQid(query)
+    }
+  }
 
   const updateRunButton = (running) => {
     setRunning(running)
@@ -47,15 +58,21 @@ const EmbedExplore = ({ id }) => {
     }
   }
 
+  const saveToParquet = (click) => {
+    console.log('saveToParquet() timestamp:', click.timeStamp)
+    console.log('saveToParquet() qid:', qid)
+  }
+
   const embedCtrRef = useCallback((el) => {
     const hostUrl = extensionContext?.extensionSDK?.lookerHostData?.hostUrl
     if (el && hostUrl) {
       LookerEmbedSDK.init(hostUrl)
       LookerEmbedSDK.createExploreWithId(id)
         .appendTo(el)
-        .on('explore:ready', (event) => { console.log('explore:ready', event); updateRunButton.bind(null, false) })
-        .on('explore:run:start', (event) => { console.log('explore:run:start', event); updateRunButton.bind(null, true) })
-        .on('explore:run:complete', (event) => { console.log('explore:run:complete', event); updateRunButton.bind(null, false) })
+        .on('explore:ready', (event) => { updateQid(event.explore.absoluteUrl); updateRunButton(false) })
+        .on('explore:run:start', (event) => { updateQid(event.explore.absoluteUrl); updateRunButton(true) })
+        .on('explore:run:complete', (event) => { updateQid(event.explore.absoluteUrl); updateRunButton(false) })
+        .on('explore:state:changed', (event) => { updateQid(event.explore.absoluteUrl) })
         .build()
         .connect()
         .then(setupExplore)
@@ -70,7 +87,7 @@ const EmbedExplore = ({ id }) => {
       <Button m="medium" onClick={runExplore} disabled={running}>
         Run Explore
       </Button>
-      <Button>Save as Parquet</Button>
+      <Button onClick={(click) => saveToParquet(click)}>Save as Parquet</Button>
       <EmbedContainer ref={embedCtrRef} />
     </>
   )
