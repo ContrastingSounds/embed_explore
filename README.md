@@ -1,18 +1,4 @@
-# Data Portal
-
-![Simple data portal leveraging Looker boards](docs/demo.gif)
-
-## Configuration instructions
-
-1. Looker admins can configure portal using the "Configure Portal" link
-2. If the extension can't find a list of boards to use, it will default to the first available board
-3. The list of boards is stored in the portal_board user attribute (i.e. this can be set by user and group)
-
-## TODOs
-
-- Support for explores
-- Complete and test packaging for Marketplace
-
+# Embed Explore
 
 ## Looker Extension using React & JavaScript
 
