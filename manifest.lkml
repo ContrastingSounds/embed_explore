@@ -15,7 +15,8 @@ application: data-portal {
       "update_user_attribute",
       "user_roles",
       "all_boards", 
-      "board"
+      "board",
+      "query_for_slug",
     ]
   }
 }

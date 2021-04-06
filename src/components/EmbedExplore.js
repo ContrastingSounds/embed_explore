@@ -23,7 +23,6 @@
  */
 
 import React, { useCallback, useContext } from 'react'
-import qs from 'query-string'
 import { Button } from '@looker/components'
 import { LookerEmbedSDK } from '@looker/embed-sdk'
 import { ExtensionContext } from '@looker/extension-sdk-react'
@@ -31,15 +30,24 @@ import { EmbedContainer } from './EmbedContainer'
 
 const EmbedExplore = ({ id }) => {
   const [qid, setQid] = React.useState('')
+  const [qobject, setQobject] = React.useState({})
+  const [latestDate, setLatestDate] = React.useState('Updating...')
   const [running, setRunning] = React.useState(true)
   const [explore, setExplore] = React.useState()
-  const extensionContext = useContext(ExtensionContext)
 
-  const updateQid = (url) => {
+  const extensionContext = useContext(ExtensionContext)
+  const sdk = extensionContext.core40SDK
+
+  const updateQid = async (url) => {
     console.log('update with url:', url)
     const params = new URLSearchParams(url)
     const query = params.get('qid')
+    console.log('query slug from url:', query)
+
     if (query) {
+      const response = await sdk.ok(sdk.query_for_slug(query))
+      console.log('query:', response)
+      setQobject(response)
       setQid(query)
     }
   }
@@ -49,6 +57,7 @@ const EmbedExplore = ({ id }) => {
   }
 
   const setupExplore = (explore) => {
+    getLatest()
     setExplore(explore)
   }
 
@@ -58,9 +67,52 @@ const EmbedExplore = ({ id }) => {
     }
   }
 
-  const saveToParquet = (click) => {
+  const setDateFilter = (filterValue) => {
+    if (explore) {
+      explore.updateFilters({
+        "order_items.created_date": filterValue
+      })
+    }
+  }
+
+  const getLatest = async () => {
+    try {
+      const queryResults = await sdk.ok(
+        sdk.run_inline_query({
+          body: {
+            "model": "ecomm",
+            "view": "order_items",
+            "fields": ["order_items.created_date"],
+            "sorts": ["order_items.created_date desc"],
+            "limit": 1,
+          }, 
+          result_format: 'json'
+        })
+      )
+      const latest = queryResults[0]["order_items.created_date"]
+      console.log('getLatest()', latest)
+      setLatestDate(latest)
+    } catch (error) {
+      console.log('Error when attempting to getLatest(): ' + error.message)
+    }
+  };
+
+  const saveToParquet = async (click) => {
     console.log('saveToParquet() timestamp:', click.timeStamp)
     console.log('saveToParquet() qid:', qid)
+
+    const userDetails = await sdk.ok(
+      sdk.me()
+    )
+    const displayDetails = {
+      name: userDetails.display_name,
+      email: userDetails.email,
+      role_ids: userDetails.role_ids,
+      group_ids: userDetails.group_ids,
+      created_at: userDetails.credentials_email.created_at,
+    }
+    console.log('current user:', displayDetails)
+    console.log('requested fields:', qobject.fields)
   }
 
   const embedCtrRef = useCallback((el) => {
@@ -69,10 +121,10 @@ const EmbedExplore = ({ id }) => {
       LookerEmbedSDK.init(hostUrl)
       LookerEmbedSDK.createExploreWithId(id)
         .appendTo(el)
-        .on('explore:ready', (event) => { updateQid(event.explore.absoluteUrl); updateRunButton(false) })
-        .on('explore:run:start', (event) => { updateQid(event.explore.absoluteUrl); updateRunButton(true) })
-        .on('explore:run:complete', (event) => { updateQid(event.explore.absoluteUrl); updateRunButton(false) })
-        .on('explore:state:changed', (event) => { updateQid(event.explore.absoluteUrl) })
+        .on('explore:ready', (event) => { updateQid(event.explore.absoluteUrl); getLatest(); updateRunButton(false) })
+        .on('explore:run:start', (event) => { updateQid(event.explore.absoluteUrl); getLatest(); updateRunButton(true) })
+        .on('explore:run:complete', (event) => { updateQid(event.explore.absoluteUrl); getLatest();updateRunButton(false) })
+        .on('explore:state:changed', (event) => { updateQid(event.explore.absoluteUrl); getLatest(); })
         .build()
         .connect()
         .then(setupExplore)
@@ -84,6 +136,7 @@ const EmbedExplore = ({ id }) => {
 
   return (
     <>
+      <Button onClick={() => setDateFilter(latestDate)}>Set to Latest ({latestDate})</Button>
       <Button m="medium" onClick={runExplore} disabled={running}>
         Run Explore
       </Button>

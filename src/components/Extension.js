@@ -93,9 +93,9 @@ const Extension = ( { route, routeState } ) => {
       items: [
         {
           key: 1,
-          title: 'Item One',
+          title: 'Dashboard One',
           icon: 'Dashboard',
-          url: '/dashboards-next/1',
+          url: '/dashboards-next/2',
         }
       ]
     },
@@ -105,7 +105,7 @@ const Extension = ( { route, routeState } ) => {
       items: [
         {
           key: 2,
-          title: 'Item Two',
+          title: 'Explore with Export',
           icon: 'Explore',
           url: '/explore/ecomm/order_items',
         }        
