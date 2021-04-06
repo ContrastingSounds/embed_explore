@@ -29,19 +29,16 @@ import qs from 'query-string';
 import { ExtensionContext } from '@looker/extension-sdk-react'
 import { EmbedDashboard } from './EmbedDashboard'
 import { EmbedLook } from './EmbedLook'
+import EmbedExplore from './EmbedExplore'
 import { AdminPage } from './AdminPage'
 
 import { 
-  Heading, 
   Flex, 
   FlexItem,
-  Menu,
-  MenuDisclosure,
   MenuList,
   MenuGroup,
   MenuItem,
   Paragraph,
-  Spinner,
   theme 
 } from '@looker/components'
 import SidebarToggle from './SidebarToggle'
@@ -69,59 +66,11 @@ const Extension = ( { route, routeState } ) => {
   let location = useLocation();
 
   const [config, setConfig] = useState({})
-  const [user, setUser] = useState({})
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [boardIds, setBoardIds] = useState([])
-  const [boards, setBoards] = useState([])
-  const [board, setBoard] = useState({})
-  const [renderBoard, setRenderBoard] = useState(false)
   const [filters, setFilters] = useState(qs.parse(location.search))
-  const [canAdminister, setCanAdminister] = useState(false)
+  const [canAdminister, setCanAdminister] = useState(true)
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
-  const menuGroups = [];
-
-  useEffect(() => {
-    const initialize = async () => {
-      try {
-        let configuration = await context.extensionSDK.getContextData()
-        setConfig(JSON.parse(configuration || "{}"))
-      } catch (error) {
-        console.log('failed to load configuration', error)
-      }
-    }
-
-    initialize();
-    getUser();
-  }, [])
-
-  useEffect(() => {
-    if (user && user.id) {
-      getBoardIds();
-    }
-  }, [user])
-
-  useEffect(() => {
-    if (boardIds.length > 0) {
-      getBoards()
-    }
-  }, [boardIds])
-
-  useEffect(() => {
-    if (boards.length > 0) {
-      setBoard({...boards[0]})
-      setRenderBoard(true)
-    }
-  }, [boards])
-
-  useEffect(() => {
-    if (menuGroups.length > 0) {
-      history.push({
-        pathname: menuGroups[0].items[0].url,
-        search: ''
-      })
-    }
-  }, [board])
 
   useEffect(()=>{
     if (filters) {
@@ -132,221 +81,133 @@ const Extension = ( { route, routeState } ) => {
     }
   }, [filters])
 
-  const getUser = async () => {
-    try {
-      const userDetails = await sdk.ok(
-        sdk.me()
-      )
-      setUser(userDetails)
-      const userRoles = await sdk.ok(sdk.user_roles(
-        {
-          user_id: userDetails.id,
-          fields: 'id,name',
-          direct_association_only: true
-        })
-      )
-      if (typeof userRoles.find(role => role.name === 'Admin') !== undefined) {
-        setCanAdminister(true)
-      }
-    } catch (error) {
-      console.log('failed to get user', error)
-    }
-  }
-
-  const getBoardIds = async () => {
-    let portalBoardAttributeId = null
-    try {
-      const userAttributes = await sdk.ok(
-        sdk.all_user_attributes({fields: ['id', 'name']})
-      )
-      portalBoardAttributeId = userAttributes.find(attr => attr.name === 'portal_boards').id
-    } catch (error) {
-      console.log('portal_boards attribute not available')
-    }
-    
-    if (portalBoardAttributeId) {
-      try {
-        const attributeValue = await sdk.ok(
-          sdk.user_attribute_user_values({
-            user_id: user.id,
-            user_attribute_ids: [portalBoardAttributeId],
-          })
-        )
-        if (attributeValue && attributeValue.length > 0 && attributeValue[0].value.length > 0 ) {
-          setBoardIds([...attributeValue[0].value.split(',')])
-        } else {
-          const allBoards = await sdk.ok(
-            sdk.all_boards('id,title,can')
-          )
-          const firstBoard = allBoards.find(board => board.can.show)
-          setBoardIds([firstBoard.id])
-        }
-      } catch (error) {
-        console.log('failed to get list of board ids', error)
-      }
-    } else {
-      try {
-        const allBoards = await sdk.ok(
-          sdk.all_boards('id,title,can')
-        )
-        const firstBoard = allBoards.find(board => board.can.show)
-        setBoardIds([firstBoard.id])
-      } catch (error) {
-        console.log('failed to get a default board for display', error)
-      }
-    }
-  }
-
-  const getBoards = async () => {
-    for (const boardId of boardIds) {
-      const boardDetails = await sdk.ok(
-        sdk.board(boardId)
-      )
-      setBoards(boards => [...boards, boardDetails])
-    }
-  }
-
   const updateConfig = async (updatedConfig) => {
     await context.extensionSDK.saveContextData(JSON.stringify(updatedConfig))
     setConfig(updatedConfig)
   }
   
-  board?.section_order?.forEach(ref => {
-    const board_section = board.board_sections.find(board_section => board_section.id === ref)
-    const group = {
-      key: ref,
-      title: board_section.title,
-      items: []
+  const menuGroups = [
+    {
+      key: 1,
+      title: "Dashboards",
+      items: [
+        {
+          key: 1,
+          title: 'Item One',
+          icon: 'Dashboard',
+          url: '/dashboards-next/1',
+        }
+      ]
+    },
+    {
+      key: 2,
+      title: "Datasets for Exploration",
+      items: [
+        {
+          key: 2,
+          title: 'Item Two',
+          icon: 'Explore',
+          url: '/explore/ecomm/order_items',
+        }        
+      ]
     }
-    const icons = board_section.description.split(',')
-    board_section.item_order.forEach((ref, idx) => {
-      const item = board_section.board_items.find(item => item.id === ref)
-      group.items.push({
-        key: ref,
-        title: item.title,
-        type: item.url.split('/')[1],
-        url: item.url,
-        icon: icons[idx] ? icons[idx] : 'Dashboard'
-      })
-    })
-    menuGroups.push(group)
-  })
+  ]
 
-  if (renderBoard) {
-    return (
-      <>
-        <PageHeader
-            color={config.color || theme.colors.palette.white} 
-            backgroundColor={config.backgroundColor || theme.colors.palette.blue400}
-        >
-          <FlexItem width="40%">
-            <Menu>
-              <MenuDisclosure tooltip="Select board">
-                <Heading as="h3" fontWeight='bold'>{board.title || 'Looker Data Platform'}</Heading>
-              </MenuDisclosure>
-              <MenuList>
-                {boards.map(board => {
-                  return (
-                    <MenuItem 
-                      onClick={() => setBoard(boards.find(sourceBoard => sourceBoard.id === board.id ))}
-                      icon="BrowseTable"
-                      key={board.id}
+  return (
+    <>
+      {/* {console.log('Embed Explore Extension')} */}
+      <PageHeader
+          color={config.color || theme.colors.palette.white} 
+          backgroundColor={config.backgroundColor || theme.colors.palette.blue400}
+      >
+        <FlexItem width="40%">
+        </FlexItem>
+        <FlexItem>
+          {config.logoUrl && config.logoUrl.length > 0 && <img src={config.logoUrl} alt="logo" height="40px" />}
+        </FlexItem>
+        <FlexItem width="40%" onClick={() => history.push({ pathname: '/admin', search: '' }) }>
+          {canAdminister && <Paragraph textAlign="right" fontSize="xsmall">Configure Portal</Paragraph>}
+        </FlexItem>
+      </PageHeader>
+
+      <PageLayout open={sidebarOpen}>
+        <LayoutSidebar>
+          {sidebarOpen &&
+            <MenuList>
+              {menuGroups.map(group => (
+                <MenuGroup key={group.key} label={group.title}>
+                  {group.items.map(item => {
+                    return (
+                    <Link 
+                      key={item.key}  
+                      to={{
+                        pathname: item.url, 
+                        search: location.search
+                      }}
                     >
-                      {board.title}
-                    </MenuItem>
-                  )
-                })}
-              </MenuList>
-            </Menu>
-          </FlexItem>
-          <FlexItem>
-            {config.logoUrl && config.logoUrl.length > 0 && <img src={config.logoUrl} alt="logo" height="40px" />}
-          </FlexItem>
-          <FlexItem width="40%" onClick={() => history.push({ pathname: '/admin', search: '' }) }>
-            {canAdminister && <Paragraph textAlign="right" fontSize="xsmall">Configure Portal</Paragraph>}
-          </FlexItem>
-        </PageHeader>
-  
-        <PageLayout open={sidebarOpen}>
-          <LayoutSidebar>
-            {sidebarOpen &&
-              <MenuList>
-                {menuGroups.map(group => (
-                  <MenuGroup key={group.key} label={group.title}>
-                    {group.items.map(item => {
-                      return (
-                      <Link 
-                        key={item.key}  
-                        to={{
-                          pathname: item.url, 
-                          search: location.search
-                        }}
-                      >
-                        <MenuItem 
-                          current={(location.pathname===item.url) ? true : false}
-                          icon={item.icon}
-                        >{item.title}</MenuItem>
-                      </Link>
-                      )}
+                      <MenuItem 
+                        current={(location.pathname===item.url) ? true : false}
+                        icon={item.icon}
+                      >{item.title}</MenuItem>
+                    </Link>
                     )}
-                  </MenuGroup>
-                ))}
-              </MenuList>
-            }
-          </LayoutSidebar>
-  
-          <SidebarDivider open={sidebarOpen}>
-            <SidebarToggle
-              isOpen={sidebarOpen}
-              onClick={toggleSidebar}
-              headerHeight="40px"
-            />
-          </SidebarDivider>
-  
-          <PageContent>
-            <Switch>
-              <Redirect exact from='/' to={menuGroups[0].items[0].url} />
-              <Route path='/dashboards-next/:ref' render={props => 
-                <EmbedDashboard 
-                  id={props.match.params.ref} 
-                  type="next" 
-                  {...{filters, setFilters}}
-                />
-              } />
-              <Route path='/dashboards/:ref' render={props => 
-                <EmbedDashboard 
-                  id={props.match.params.ref} 
-                  type="legacy" 
-                  {...{filters, setFilters}}
-                />
-              } />
-              <Route path='/looks/:ref' render={props => 
-                <EmbedLook 
-                  id={props.match.params.ref} 
-                  {...{filters, setFilters}}
-                />
-              } />
-              <Route path='/admin' render={props =>
-                <AdminPage 
-                  canAdminister={canAdminister}
-                  config={config}
-                  updateConfig={updateConfig}
-                />
-              } />
-            </Switch>
-          </PageContent>
-  
-        </PageLayout>
-      </>
-    )
-  } else {
-    return (
-      <Flex width='100%' height='90%' alignItems='center' justifyContent='center'>
-        <Spinner color='black' />
-      </Flex>
-    )
-  }
-  
+                  )}
+                </MenuGroup>
+              ))}
+            </MenuList>
+          }
+        </LayoutSidebar>
+
+        <SidebarDivider open={sidebarOpen}>
+          <SidebarToggle
+            isOpen={sidebarOpen}
+            onClick={toggleSidebar}
+            headerHeight="40px"
+          />
+        </SidebarDivider>
+
+        <PageContent>
+          <Switch>
+            <Redirect exact from='/' to={menuGroups[0].items[0].url} />
+            <Route path='/dashboards-next/:ref' render={props => 
+              <EmbedDashboard 
+                id={props.match.params.ref} 
+                type="next" 
+                {...{filters, setFilters}}
+              />
+            } />
+            <Route path='/dashboards/:ref' render={props => 
+              <EmbedDashboard 
+                id={props.match.params.ref} 
+                type="legacy" 
+                {...{filters, setFilters}}
+              />
+            } />
+            <Route path='/looks/:ref' render={props => 
+              <EmbedLook 
+                id={props.match.params.ref} 
+                {...{filters, setFilters}}
+              />
+            } />
+            <Route path='/explore/:model/:explore' render={props => 
+              <EmbedExplore 
+                id={props.match.params.model + '::' + props.match.params.explore} 
+                {...{filters, setFilters}}
+              />
+            } />
+            <Route path='/admin' render={props =>
+              <AdminPage 
+                canAdminister={canAdminister}
+                config={config}
+                updateConfig={updateConfig}
+              />
+            } />
+          </Switch>
+        </PageContent>
+
+      </PageLayout>
+    </>
+  )
 }
 
 
